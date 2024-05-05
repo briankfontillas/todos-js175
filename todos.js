@@ -97,6 +97,17 @@ app.get("/lists/:todoListId", (req, res, next) => {
   }
 });
 
+app.get("/lists/:todoListId/edit", (req, res, next) => {
+  let todoListId = req.params.todoListId;
+  let todoList = loadToDoList(+todoListId);
+
+  if (!todoList) {
+    next(new Error("Not found."));
+  } else {
+    res.render("edit-list", { todoList });
+  }
+});
+
 app.post("/lists/:todoListId/todos/:todoId/toggle", (req, res, next) => {
   let { todoListId, todoId } = { ...req.params };
   let todoList = loadToDoList(+todoListId);
@@ -178,6 +189,60 @@ app.post("/lists/:todoListId/todos",
         }
       }
 });
+
+app.post("/lists/:todoListId/destroy", (req, res, next) => {
+  let todoListId = +req.params.todoListId;
+  let index = todoLists.findIndex(todoList => todoList.id === todoListId);
+
+  if (index === -1) {
+    next(new Error("Not found."));
+  } else {
+    todoLists.splice(index, 1);
+
+    req.flash("success", "Todo list deleted.");
+    res.redirect("/lists");
+  }
+});
+
+app.post("/lists/:todoListId/edit",
+  [
+    body("todoListTitle")
+      .trim()
+      .isLength({ min: 1 })
+      .withMessage("The list title is required.")
+      .isLength({ max: 100 })
+      .withMessage("List title must be between 1 and 100 characters.")
+      .custom(title => {
+        let duplicate = todoLists.find(list => list.title === title);
+        return duplicate === undefined;
+      })
+      .withMessage("List title must be unique."),
+  ],
+  (req, res, next) => {
+    let todoListId = req.params.todoListId;
+    let todoList = loadToDoList(+todoListId);
+    
+    if (!todoList) {
+      next(new Error("Not found."));
+    } else {
+      let errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        errors.array().forEach(message => req.flash("error", message.msg));
+        res.render("edit-list", {
+          flash: req.flash(),
+          todoTitle: req.body.todoTitle,
+          todoList: todoList,
+        });
+      } else {
+        let title = req.body.todoListTitle;
+        todoList.setTitle(title);
+
+        req.flash("success", `Todo list renamed to ${title}!`);
+        res.redirect(`/lists/${todoListId}/edit`);
+      }
+    }
+  }
+);
 
 app.use((err, req, res, _next) => {
   console.log(err);
